@@ -45,7 +45,7 @@ serve(async (req: Request) => {
       console.log("exists:", pedidoExists);
       const pedidoIdExists = pedidoExists?.id;
 
-      //await sendWebhook(urlSheet, payload);
+      await sendWebhook(urlSheet, payload);
 
       if(pedidoExists) {
         const updateResponse = await updatePedido(pedido, pedidoIdExists, supabase);
