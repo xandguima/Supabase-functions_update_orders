@@ -6,7 +6,6 @@ import {
 const supabaseUrl: string | undefined = Deno.env.get("MY_SUPABASE_URL");
 const supabaseKey: string | undefined = Deno.env.get("MY_SUPABASE_KEY");
 
-
 // Função para descriptografar o admin_token
 async function pgpSymDecrypt(
   encryptedData: string,
@@ -35,6 +34,7 @@ async function authenticateUser(email: string, password: string) {
     );
   }
   const supabase = createClient(supabaseUrl, supabaseKey);
+
   // Autenticação do usuário
   const { data, error } = await supabase.auth
     .signInWithPassword({
@@ -47,10 +47,15 @@ async function authenticateUser(email: string, password: string) {
     return null;
   }
 
+  
+  // Verifique se o usuário foi autenticado
+  if (!data) {
+    console.error("Erro de autenticação: Dados do usuário não retornados");
+    return null;
+  }
 
   // Retorne a sessão e os dados do usuário se as validações passarem
-  return { data, supabase};
+  return { data, supabase };
 }
-
 
 export default authenticateUser;
