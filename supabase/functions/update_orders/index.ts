@@ -1,18 +1,14 @@
 import { serve } from "https://deno.land/std@0.131.0/http/server.ts";
-import { sendWebhook } from "./sendWebhookSheert.ts";
+//import { sendWebhook } from "./sendWebhookSheet.ts";
 import { APIobterPedido } from "./CallAPI.ts";
-import { inserirPedido } from "./insertOrder.ts";
-import { updatePedido } from "./updateOrder.ts";
+import  PedidoController  from "./controllers/OrderController.ts";
 import authenticateUser from "./middleware/auth.ts";
 import WebhookPayload from "./types/recevedWebhook.ts";
 import { Pedido } from "./types/responseTinyAPI.ts";
-import orderExists from "./verifyOrder.ts";
 
 
 const supabaseEmail: string | undefined = Deno.env.get("MY_SUPABASE_EMAIL");
-const supabasePassword: string | undefined = Deno.env.get(
-  "MY_SUPABASE_PASSWORD",
-);
+const supabasePassword: string | undefined = Deno.env.get("MY_SUPABASE_PASSWORD");
 const urlSheet: string | undefined = Deno.env.get("MY_SHEET_URL");
 
 if (!supabaseEmail || !supabasePassword) {
@@ -22,50 +18,47 @@ if (!urlSheet) {
   throw new Error("Missing SHEET_URL environment variable");
 }
 
+const pedidoController=new PedidoController();
+
 serve(async (req: Request) => {
-  if (req.method === "POST") {
-    try {
-      const payload: WebhookPayload = await req.json();
-      const pedidoId_tiny = payload.dados.id;
+  if (req.method !== "POST") {
+    return new Response("Method não permitido", { status: 405 });
+  }
+  
+  
+  try {
+    const payload: WebhookPayload = await req.json();
+    const id_pedido_tiny = payload.dados.id;
 
-      const pedido: Pedido = await APIobterPedido(pedidoId_tiny);
+    const pedido: Pedido = await APIobterPedido(id_pedido_tiny);
 
-      const response = await authenticateUser(supabaseEmail, supabasePassword);
-      const session = response?.data.session;
-      const user = response?.data.user;
-      const supabase = response?.supabase;
+    const response = await authenticateUser(supabaseEmail, supabasePassword);
 
-
-      if (!session || !user || !supabase) {
-        console.error("Erro ao autenticar o usuário:", response);
-        return new Response("Erro ao autenticar o usuário", { status: 500 });
-      }
-
-      const pedidoExists = await orderExists(pedidoId_tiny, supabase);
-      console.log("exists:", pedidoExists);
-      const pedidoIdExists = pedidoExists?.id;
-
-      await sendWebhook(urlSheet, payload);
-
-      if(pedidoExists) {
-        const updateResponse = await updatePedido(pedido, pedidoIdExists, supabase);
-        console.log("Pedido atualizado:", updateResponse);
-        return new Response("Pedido atualizado com sucesso", { status: 200 });
-      }else {
-        const insertResponse = await inserirPedido(pedido, supabase);
-        console.log("Novo pedido inserido:", insertResponse);
-        return new Response("Novo pedido inserido com sucesso", {
-          status: 201,
-        });
-      }
-
-    } catch (error) {
-      console.error("Erro ao processar o webhook:", error);
-      return new Response(`Erro ao processar o pedido: ${error.message}`, {
-        status: 500,
-      });
+    if (!response) {
+      return new Response("Erro ao autenticar", { status: 500 });
     }
-  } else {
-    return new Response("To aqui rodando");
+    const { supabase } = response;
+
+    const pedidoExists = await pedidoController.select(id_pedido_tiny, supabase);
+    const id_pedidoExists = pedidoExists?.id;
+    
+    //await sendWebhook(urlSheet, payload);
+
+    if (pedidoExists) {
+      const pedidoNumero = await pedidoController.update(pedido, id_pedidoExists, supabase);
+      console.log("Pedido atualizado:", pedidoNumero);
+      return new Response(`Pedido atualizado com sucesso ${pedidoNumero}`, {status: 200});
+
+    } else {
+      const id_pedido = await pedidoController.create(pedido, supabase);
+      console.log("Novo pedido inserido:", id_pedido);
+      return new Response("Novo pedido inserido com sucesso", {status: 201});
+    }
+
+  } catch (error) {
+    console.error("Erro ao processar o webhook:", error);
+    return new Response(`Erro ao processar o pedido: ${error.message}`, {
+      status: 500,
+    });
   }
 });
